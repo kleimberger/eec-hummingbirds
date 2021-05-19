@@ -1,4 +1,4 @@
-## ----setup---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----setup----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 knitr::opts_chunk$set(echo = TRUE)
 
 library(dplyr)
@@ -19,9 +19,9 @@ plan(multiprocess)
 set.seed(0)
 
 
-## ----get_hummingbird_data------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----get_hummingbird_data-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Data with derived variables (i.e., migrant/forest dependency/hermit scores already calculated, variables already log-transformed)
-hbird_data <- read.csv("C:\\Users\\leimberk\\Box\\Biol_Reviews_Analyses\\IUCN_status_and_traits\\3_Phylogenetic_regression\\export\\Hummingbird_IUCN_and_trait_data_with_derived_vars_20210507.csv") %>%
+hbird_data <- read.csv("C:\\Users\\leimberk\\Box\\Biol_Reviews_Analyses\\IUCN_status_and_traits\\1_Compiling_IUCN_and_trait_data\\export\\Hummingbird_IUCN_and_trait_data_with_derived_vars_20210518.csv") %>%
   mutate_at(vars(Migratory_score, Forest_depend_score, Hermit), ~as.factor(.))
 
 #Create separate datasets to use later
@@ -37,7 +37,7 @@ vars_log <- c("Body_mass_log", "Bill_length_log", "Range_size_log", "Elevation_r
 vars_pretty_names <- c("Log(Body mass)", "Log(Bill length)", "Log(Range size)", "Elevational range", "Human footprint within range", "Migrant", "Forest specialist", "Hermit")
 
 
-## ----get_tree------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----get_tree-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 tree_mcc <- read.nexus("C:\\Users\\leimberk\\Box\\Biol_Reviews_Analyses\\IUCN_status_and_traits\\_Data\\Phylogeny\\Consensus_trees\\BEAST_MCC_10000_tree.tre")
 tree_mcc_hbirds <- drop.tip(tree_mcc, tip=c("Aegotheles_insignis", "Hemiprocne_mystacea")) #Without the outgroups (nightjar + tree swift)
 
@@ -50,7 +50,7 @@ species_list <- data.frame(tree_mcc_hbirds$tip.label) #only look at first tree o
 names(species_list) <- "species"
 
 
-## ----explore_iucn_data---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----explore_iucn_data----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Number of species with data for RedList category ('Threatened') and each predictor variable
 threat_by_predict <- threat_data %>%
   group_by(Threatened) %>%
@@ -85,7 +85,7 @@ decrease_sum <- decrease_data %>%
     labs(x="Population decreasing"))
 
 
-## ----explore_predictors--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----explore_predictors---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Want to look at dataset close to what will be used in analysis. Remove species without complete set of predictor variables...
 threat_vars <- threat_data %>% select(all_of(vars) | all_of(vars_log))
 threat_data_complete <- threat_vars[complete.cases(threat_vars), ]
@@ -123,7 +123,7 @@ decrease_data_complete <- decrease_vars[complete.cases(decrease_vars), ]
 #ggsave("export/Decrease_pairs_plots_20200331.pdf", decrease_pairs_log, width=11, height=8.5, unit=c("in"))
 
 
-## ----functions_for_modeling----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----functions_for_modeling-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Subset data to complete cases of response, predictors
 subset_data <- function(y, vars, data){
   
@@ -223,7 +223,7 @@ which(!(pruned_tree_test$tip.label %in% rownames(complete_data_test))) #Which sp
 #With population trend...
 complete_data_test <- subset_data(y = "Decreasing", vars = vars_log, data = hbird_data)
 pruned_tree_test <- prune_tree(tree = tree_mcc_hbirds, data = complete_data_test)
-unique(Ntip(tree_test)) #Number of species (tips) included in the tree
+unique(Ntip(pruned_tree_test)) #Number of species (tips) included in the tree
 pruned_tree_data_test <- subset_data_to_tree(pruned_tree = pruned_tree_test, data = complete_data_test)
 scaled_data_test <- scale_data(vars = vars_log, data = pruned_tree_data_test)
 formula_test <- create_model_formula(y = "Threatened", vars = vars_log)
@@ -234,40 +234,40 @@ which(!(rownames(complete_data_test) %in% pruned_tree_test$tip.label)) #Which sp
 which(!(pruned_tree_test$tip.label %in% rownames(complete_data_test))) #Which species are in tree but not in data. Want this to be "integer (empty)".
 
 
-## ----run_threat_model----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----run_threat_model-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #With bootstrapped confidence intervals (takes really long time to run!)
-threat_model_boot <- run_model(y = "Threatened",
-                               vars = vars_log,
-                               tree = tree_mcc_hbirds,
-                               data = hbird_data,
-                               bootstrap = TRUE)
+# threat_model_boot <- run_model(y = "Threatened",
+#                                vars = vars_log,
+#                                tree = tree_mcc_hbirds,
+#                                data = hbird_data,
+#                                bootstrap = TRUE)
+# 
+# summary(threat_model_boot)
+# threat_model_boot$alphaWarn #Check to see if alpha parameter is near bounds (0 = not near bounds, 1 = near upper bound, 2 = near lower bound)
 
-summary(threat_model_boot)
-threat_model_boot$alphaWarn #Check to see if alpha parameter is near bounds (0 = not near bounds, 1 = near upper bound, 2 = near lower bound)
 
-
-## ----run_decrease_model--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----run_decrease_model---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #With bootstrapped confidence intervals (takes really long time to run!)
-decrease_model_boot <- run_model(y = "Decreasing",
-                                 vars = vars_log,
-                                 tree = tree_mcc_hbirds,
-                                 data = hbird_data,
-                                 bootstrap = TRUE)
+# decrease_model_boot <- run_model(y = "Decreasing",
+#                                  vars = vars_log,
+#                                  tree = tree_mcc_hbirds,
+#                                  data = hbird_data,
+#                                  bootstrap = TRUE)
+# 
+# summary(decrease_model_boot)
+# decrease_model_boot$alphaWarn #Check to see if alpha parameter is near bounds (0 = not near bounds, 1 = near upper bound, 2 = near lower bound)
 
-summary(decrease_model_boot)
-decrease_model_boot$alphaWarn #Check to see if alpha parameter is near bounds (0 = not near bounds, 1 = near upper bound, 2 = near lower bound)
 
-
-## ----export_bootstraps---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----export_bootstraps----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #write_rds(threat_model_boot, "export/Threat_model_output_20210513.rds")
 #write_rds(decrease_model_boot, "export/Decrease_model_output_20210513.rds")
 
 #Reimport bootstrapped models to don't have to run again if need to re-make figures, etc.
-#threat_model_boot <- read_rds("C:\\Users\\leimberk\\Box\\Biol_Reviews_Analyses\\IUCN_status_and_traits\\3_Phylogenetic_regression\\export\\Threat_model_output_20210513.rds")
-#decrease_model_boot <- read_rds("C:\\Users\\leimberk\\Box\\Biol_Reviews_Analyses\\IUCN_status_and_traits\\3_Phylogenetic_regression\\export\\Decrease_model_output_20210513.rds")
+threat_model_boot <- read_rds("C:\\Users\\leimberk\\Box\\Biol_Reviews_Analyses\\IUCN_status_and_traits\\3_Phylogenetic_regression\\export\\Threat_model_output_20210513.rds")
+decrease_model_boot <- read_rds("C:\\Users\\leimberk\\Box\\Biol_Reviews_Analyses\\IUCN_status_and_traits\\3_Phylogenetic_regression\\export\\Decrease_model_output_20210513.rds")
 
 
-## ----vif_function--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----vif_function---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #car::vif() does not work with phyloglm objects. Get the following error: "Error in terms.default: no terms component nor atribute".
 #To use car::vif, need an object that responds to coef, vcov, and model.matrix, such as an lm or glm object.
 #Original code from https://github.com/cran/car/blob/master/R/vif.R                   
@@ -303,7 +303,7 @@ calculate_vif <- function(mod, ...) {
 }
 
 
-## ----calculate_vif-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----calculate_vif--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Function to check for collinearity, make summary table of VIF
 make_vif_table<-function(model, y){
 
@@ -341,7 +341,7 @@ vif_table <- threat_vif_boot %>%
 #write.csv(vif_table, "export/Table_of_VIF_values_20210513.csv")
 
 
-## ----export_results------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----export_results-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Function to get summary output from phyloglm object
 get_summary_output <- function(model){
   
@@ -414,7 +414,7 @@ results_summary_table <- make_table(summary_output)
 #write.csv(results_summary_table, "export/Table_of_model_results_20210513.csv")
 
 
-## ----make_results_figure-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## ----make_results_figure--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Function to make coefficient plots
 make_coef_plot <- function(summary_data){
   
