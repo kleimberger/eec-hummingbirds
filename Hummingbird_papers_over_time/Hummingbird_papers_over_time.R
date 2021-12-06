@@ -77,18 +77,22 @@ data_for_upsetr <- papers %>%
   mutate(presence = 1) %>%
   select(topic, presence, title) %>%
   pivot_wider(names_from = topic, values_from = presence, values_fill = list(presence = 0)) %>%
-  data.frame()
+  data.frame() %>%
+  rename("Hummingbirds" = "hummingbirds", "Ecology" = "ecology", "Evolution" = "evolution", "Conservation" = "conservation", "Networks" = "networks")
 
-upset_plot<- upset(data_for_upsetr, sets = c("ecology", "evolution", "conservation", "networks"), mb.ratio = c(0.55, 0.45), keep.order = "true", order.by = "freq", text.scale = 2)
-upset_plot
+#Plot with UpSetR
 #mb.ratio is ratio between matrix plot and main bar
+upset_plot <- upset(data_for_upsetr, sets = c("Ecology", "Evolution", "Conservation", "Networks"),
+                    mb.ratio = c(0.55, 0.45), keep.order = "true", order.by = "freq", text.scale = 2,
+                    mainbar.y.label = "Intersection size", sets.x.label = "Set size")
+upset_plot
 
-# setwd("C:/Users/kleim/Box/Biol_Reviews_Analyses/Papers_over_time/export")
-# pdf(file="Intersection_plot_20201019.pdf", onefile=FALSE, width = 11, height = 8.5) # or other device
+# setwd("C:/Users/leimberk/Box/Biol_Reviews_Analyses/Papers_over_time/export")
+# pdf(file="Intersection_plot_20211130.pdf", onefile=FALSE, width = 11, height = 8.5) # or other device
 # upset_plot
 # dev.off()
 # 
-# png(file="Intersection_plot_20201019.png", width = 11, height = 8.5, units = "in", res = 300) # or other device
+# png(file="Intersection_plot_20211130.png", width = 11, height = 8.5, units = "in", res = 300) # or other device
 # upset_plot
 # dev.off()
 
@@ -103,7 +107,7 @@ plot_line_with_labels<-ggplot() +
         axis.line = element_line(colour = "black"),
         legend.position = "none") +
   geom_smooth(data = papers_sum, aes(x = year, y = num_papers, colour = topic), method = "loess", span = 0.15, method.args = list(degree=1), se = FALSE, size = 1.2) +
-  geom_text(data = papers_sum %>% filter(year == last(year)), aes(x = year, y = num_papers * 1.08 + 0.4, label = topic), hjust = 0, nudge_x = 0.5, size = c(6, 4.5, 4.5, 4.5, 4.5)) +
+  geom_text(data = papers_sum %>% filter(year == last(year)), aes(x = year, y = num_papers * 1.08 + 0.4, label = topic), hjust = 0, nudge_x = 0.5, size = c(6, 5.5, 5.5, 5.5, 5.5)) +
   scale_x_continuous(breaks = seq(1965, 2020, 5), expand = expansion(mult = c(0.05, .3))) + #expand pads your data (multiplicatively and additively) to calculate the scale limits. Makes room for text labels.
   labs(x = "\nYear", y = "Number of publications\n", color = "Topic", linetype = "Topic") +
   scale_color_grey(start = 0, end = 0.75) #Ending at 0.75 prevents super light values for last category (networks)
@@ -112,5 +116,5 @@ plot_line_with_labels
 
 #Export
 setwd("C:/Users/leimberk/Box/Biol_Reviews_Analyses/Papers_over_time")
-#ggsave("export/Papers_over_time_lines_labeled_gray_20210518.png", plot_line_with_labels, width = 10, height = 7.5, units = c("in"), dpi = 300)
+#ggsave("export/Papers_over_time_lines_labeled_gray_20210612.png", plot_line_with_labels, width = 10, height = 7.5, units = c("in"), dpi = 300)
 
