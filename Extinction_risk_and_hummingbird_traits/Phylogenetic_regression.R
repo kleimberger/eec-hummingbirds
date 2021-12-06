@@ -34,7 +34,7 @@ decrease_data <- hbird_data %>%
 #Lists of predictor variables, to use later
 vars <- c("Body_mass", "Bill_length", "Range_size", "Elevation_range", "Human_footprint", "Migratory_score", "Forest_depend_score", "Hermit") #All variables
 vars_log <- c("Body_mass_log", "Bill_length_log", "Range_size_log", "Elevation_range", "Human_footprint", "Migratory_score", "Forest_depend_score", "Hermit") #All variables, some ln-transformed
-vars_pretty_names <- c("Log(Body mass)", "Log(Bill length)", "Log(Range size)", "Elevational range", "Human footprint within range", "Migrant", "Forest specialist", "Hermit")
+vars_pretty_names <- c("Ln Body mass", "Ln Bill length", "Ln Range size", "Elevational range", "Human footprint within range", "Migrant", "Forest specialist", "Hermit")
 
 
 ## ----get_tree-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -100,7 +100,7 @@ decrease_data_complete <- decrease_vars[complete.cases(decrease_vars), ]
                         lower=list(continuous = "points", combo = "box_no_facet", discrete = "facetbar")))
 
 
-#With log-transformed variables. Distributions are much less skewed for morphological measuresments, range size
+#With log-transformed variables. Distributions are much less skewed for morphological measurements, range size
 (threat_pairs_log <- GGally::ggpairs(dplyr::select(threat_data_complete, all_of(vars_log)), 
                         upper=list(continuous = wrap("cor", size = 4, display_grid = FALSE), combo = "na", discrete = "na"),
                         lower=list(continuous = "points", combo = "box_no_facet", discrete = "facetbar")))
@@ -276,7 +276,7 @@ decrease_model_boot <- read_rds("C:\\Users\\leimberk\\Box\\Biol_Reviews_Analyses
 calculate_vif <- function(mod, ...) {
     if (any(is.na(coef(mod)))) 
         stop ("there are aliased coefficients in the model")
-    v <- vcov(mod)
+    v <- mod$vcov #KGL replaced vcov(mod) with mod$vcov
     assign <- attr(mod$X, "assign") #KGL replaced model.matrix(mod) with mod$X
     if (names(coefficients(mod)[1])  ==  "(Intercept)") {
         v <- v[-1, -1]
@@ -305,7 +305,7 @@ calculate_vif <- function(mod, ...) {
 
 ## ----calculate_vif--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Function to check for collinearity, make summary table of VIF
-make_vif_table<-function(model, y){
+make_vif_table <- function(model, y){
 
       vif_table <- calculate_vif(model) %>%
              data.frame() %>%
@@ -314,16 +314,16 @@ make_vif_table<-function(model, y){
              mutate(Response = !!y) %>%
              mutate(Variable = case_when(
                     Variable  ==  "(Intercept)" ~ "Intercept",
-                    Variable  ==  "Body_mass_log" ~ "Log(Body mass)",
-                    Variable  ==  "Bill_length_log" ~ "Log(Bill length)",
-                    Variable  ==  "Range_size_log" ~ "Log(Range size)",
+                    Variable  ==  "Body_mass_log" ~ "Ln Body mass",
+                    Variable  ==  "Bill_length_log" ~ "Ln Bill length",
+                    Variable  ==  "Range_size_log" ~ "Ln Range size",
                     Variable  ==  "Elevation_range" ~ "Elevational range",
                     Variable  ==  "Human_footprint" ~ "Human footprint within range",
                     Variable  ==  "Migratory_score1" ~ "Migrant",
                     Variable  ==  "Forest_depend_score1" ~ "Forest specialist",
                     Variable  ==  "Hermit1" ~ "Hermit",
                     TRUE ~ as.character(Variable))) %>%
-            mutate_at(vars(VIF), list(~round(., digits=  2)))
+            mutate_at(vars(VIF), list(~round(., digits =  2)))
   
   return(vif_table)
       
@@ -345,10 +345,27 @@ vif_table <- threat_vif_boot %>%
 #Function to get summary output from phyloglm object
 get_summary_output <- function(model){
   
-  output <- summary(model)[[2]] %>%
+  # output <- summary(model)[[2]] %>%
+  #   data.frame() %>%
+  #   rownames_to_column(var = "Variable") %>%
+  #   mutate(Alpha=model$alpha)
+  
+  confint <- model$bootconfint95 %>%
+    t() %>%
     data.frame() %>%
     rownames_to_column(var = "Variable") %>%
-    mutate(Alpha=model$alpha)
+    rename(LowerCI = "X2.5.", UpperCI = "X97.5.")
+    
+  alpha <- data.frame(Variable = "alpha", Estimate = model$alpha)
+  
+  output <- model$coefficients %>%
+    data.frame() %>%
+    rename(Estimate = ".") %>%
+    rownames_to_column(var = "Variable") %>%
+    bind_rows(alpha) %>%
+    left_join(confint)
+  
+  return(output)
   
 }
 
@@ -359,20 +376,26 @@ decrease_summary_boot <- get_summary_output(decrease_model_boot)  %>% mutate(Res
 #Combine summary output
 summary_output <- threat_summary_boot %>%
   bind_rows(decrease_summary_boot) %>%
-  select(CI_type, Response, Variable, Alpha, everything())
-
+  select(CI_type, Response, Variable, everything())
 
 #Function to make summary tables for plotting, export
 make_table <- function(starter_table){
   
+  starter_table <- starter_table %>%
+    mutate(Response = factor(Response, levels = c("Threatened", "Decreasing"), labels = c("Threatened", "Decreasing population")))
+  
+  #Will this row out temporarily, add back in later
+  alpha <- starter_table %>%
+    filter(Variable == "alpha")
+  
   #Step 1: Rename factor levels
   table1 <- starter_table %>%
-    mutate(Response = factor(Response, levels = c("Threatened", "Decreasing"), labels = c("Threatened", "Decreasing population"))) %>%
+    filter(Variable != "alpha") %>%
     mutate(Variable = case_when(
                     Variable == "(Intercept)" ~ "Intercept",
-                    Variable == "Body_mass_log" ~ "Log(Body mass)",
-                    Variable == "Bill_length_log" ~ "Log(Bill length)",
-                    Variable == "Range_size_log" ~ "Log(Range size)",
+                    Variable == "Body_mass_log" ~ "Ln Body mass",
+                    Variable == "Bill_length_log" ~ "Ln Bill length",
+                    Variable == "Range_size_log" ~ "Ln Range size",
                     Variable == "Elevation_range" ~ "Elevational range",
                     Variable == "Human_footprint" ~ "Human footprint within range",
                     Variable == "Migratory_score1" ~ "Migrant",
@@ -381,6 +404,8 @@ make_table <- function(starter_table){
                     TRUE ~ as.character(Variable))) %>%
     mutate(Variable = factor(Variable, levels = c("Intercept", vars_pretty_names)))
 
+  #return(table1)
+  
   #Step 2: Calculate CI & backtransform coefficients
   table2 <- table1 %>%
     
@@ -389,34 +414,40 @@ make_table <- function(starter_table){
     mutate(p.value = ifelse(CI_type == "Bootstrap", NA, p.value)) %>% 
 
     #Backtransform coefficients
-    rename(LowerCI = lowerbootCI, UpperCI = upperbootCI) %>%
     mutate_at(vars(Estimate, LowerCI, UpperCI), funs(odds = exp(.))) %>% #Log-odds to odds
     mutate_at(vars(Estimate, LowerCI, UpperCI), funs(prob = plogis(.))) %>% #Log-odds to probabilities
       
     #Calculating fold-changes for logged variables.
     #For logits, increase in X is associated with change in the odd by a multiplicative factor of k^coefficient (Statistical Sleuth p. 645)
     mutate_at(vars(Estimate, LowerCI, UpperCI), funs(odds2x = 2^., odds0.5x = 0.5^.)) %>%  
-    mutate_at(vars(contains('0.5x'), contains('2x')), funs(ifelse(grepl('Log', Variable), ., NA))) %>% #Removing fold-changes for non-logged variables
+    mutate_at(vars(contains('0.5x'), contains('2x')), funs(ifelse(grepl('Ln', Variable), ., NA))) %>% #Removing fold-changes for non-logged variables
     rename(LowerCI_odds0.5x = UpperCI_odds0.5x, UpperCI_odds0.5x = LowerCI_odds0.5x) #Switch the upper and lower CIs for 0.5-fold change. Because 0.5^X = (1/2)^X = 1/(2^X). So the lower (and smaller) CI will actually cause larger CI       
+  
+   #return(table2)
   
    #Step 3: Add column for significant level + round to 2 digits 
    table3 <- table2 %>%
-      mutate(Signif_level = ifelse(CI_type == "Bootstrap", ifelse(LowerCI < 0 & UpperCI > 0, "P > 0.05", "0 < P < 0.05"), NA)) %>% #For bootstrap, p-values based on CI
-      mutate_if(is.numeric, funs(round(., digits = 2))) %>%
-      select(CI_type:Estimate_odds0.5x, LowerCI_odds0.5x, UpperCI_odds0.5x, everything())
+     mutate(Signif_level = ifelse(CI_type == "Bootstrap", ifelse(LowerCI < 0 & UpperCI > 0, "P > 0.05", "0 < P < 0.05"), NA)) %>% #For bootstrap, p-values based on CI
+     mutate_if(is.numeric, funs(round(., digits = 2))) %>%
+     select(CI_type:Estimate_odds0.5x, LowerCI_odds0.5x, UpperCI_odds0.5x, everything()) %>%
+     bind_rows(alpha) %>% #Add alpha back in
+     arrange(CI_type, Response)
 
     return(table3)
 }
 
-results_summary_table <- make_table(summary_output)
+results_summary_table <- make_table(summary_output) 
 
 #Export
 #write.csv(results_summary_table, "export/Table_of_model_results_20210513.csv")
 
-
 ## ----make_results_figure--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Function to make coefficient plots
 make_coef_plot <- function(summary_data){
+  
+  #Remove alpha from dataframe
+  summary_data <- summary_data %>%
+    filter(Variable != "alpha")
   
   #Some of this code originally from Christopher Wolf
   plot <- ggplot(data = filter(summary_data, Variable != "Intercept"), aes(x = Variable, y = Estimate, shape = Response, alpha = Signif_level)) + #alpha=Signif_level, color=Response
@@ -447,5 +478,5 @@ make_coef_plot <- function(summary_data){
 
 #Export
 setwd("C:/Users/leimberk/Box/Biol_Reviews_Analyses/IUCN_status_and_traits/3_Phylogenetic_regression")
-#ggsave("export/Standardized_coefs_bootstrapCI_plot_20210513.png", bootstrap_coef_plot, device="png", width=10, height=8.5, dpi = 300, units="in")
+#ggsave("export/Standardized_coefs_bootstrapCI_plot_20211130.png", bootstrap_coef_plot, device="png", width=10, height=8.5, dpi = 300, units="in")
 
