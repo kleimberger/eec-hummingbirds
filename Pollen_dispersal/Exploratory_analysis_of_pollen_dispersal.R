@@ -56,14 +56,16 @@ model_fits$fit
 
 #Rate parameter alpha
 rate_params <- model_fits %>%
-  broom::tidy(fit) %>% 
+  nest_by(Species_name, Dye_source_defense, fit) %>%
+  summarise(broom::tidy(fit)) %>%
+  ungroup() %>%
   select(Species_name, Dye_source_defense, term, estimate) %>% 
   spread(term, estimate) %>%
   rename(rate_constant = alpha) %>%
   ungroup()
 
 #Residual sum of squares
-#There is probably a more direct way to extract this from the fit objects, but haven't figured it out
+#There is probably a more direct way to extract this from the fit objects, but this works
 rss <- tibble(model = model_fits$fit) %>%
   mutate(residuals = purrr::map(model, resid),
          squared_residuals = purrr::map(residuals, ~.x^2),
@@ -80,7 +82,7 @@ fit_summary <- cbind(rate_params, rss) %>%
 ## ----summarize_dispersal_distances-------------------------------------------------------------------------------------------------------------------------------------------------------------
 dispersal_distance_sum <- data %>%
   filter(Y > 0) %>% #Interested in how far dye got, so not interested in distances that didn't have any dye found (i.e., Y = 0)
-  group_by(Species_name, Dye_source_defense) %>%
+  group_by(Study, Species_name, Dye_source_defense) %>%
   summarise(max = max(X, na.rm = TRUE),
             min = min(X, na.rm = TRUE),
             mean = mean(X, na.rm = TRUE),
@@ -92,10 +94,10 @@ dispersal_distance_sum <- data %>%
 ## ----calculate_distance_with_50%_initial_value-------------------------------------------------------------------------------------------------------------------------------------------------
 #Calculate distance at which dye proportion is 50% of initial value
 #First, calculate initial dye transfer proportion, and calculate its half value
-#This is a bit complicated because, in one instance, initial values are not necessarily max value (H. tortuosa)
+#This is a bit complicated because, initial values are not necessarily max value (1)
 #Also need to account for there being multiple initial values for studies/species with multiple replicates (days)
 first_x_values <- data %>%
-  group_by(Species_name) %>%
+  group_by(Study, Species_name, Dye_source_defense) %>%
   arrange(X) %>%
   summarise(first_X = first(X)) %>%
   ungroup() %>%
@@ -105,7 +107,7 @@ initial_y_values <- data %>%
   filter(Y > 0) %>%
   mutate(first_x_ID = paste(Species_name, X, sep = "_")) %>%
   filter(first_x_ID %in% first_x_values$first_x_ID) %>%
-  group_by(Species_name, Dye_source_defense) %>%
+  group_by(Study, Species_name, Dye_source_defense) %>%
   summarise(initial_y = max(Y)) %>% #For species with > 1 value (i.e., if multiple replicates) - pick max initial value
   ungroup()
   
@@ -122,23 +124,26 @@ half_y_predicted_distances <- fit_summary %>%
 ## ----calculate_max_search_distance-------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Calculate max distance that pollen was searched for (can include zero)
 max_search_distance_sum <- data %>%
-  group_by(Species_name, Dye_source_defense)%>%
+  group_by(Study, Species_name, Dye_source_defense)%>%
   summarise(max_search_dist = max(X))
 
 
 ## ----combine_summaries_of_pollen_dispersal-----------------------------------------------------------------------------------------------------------------------------------------------------
+library(stringr)
 pollen_dispersal_sum <- half_y_predicted_distances %>%
   left_join(dispersal_distance_sum) %>%
   left_join(max_search_distance_sum) %>%
-  mutate_if(is.numeric, ~round(., digits=2))
+  mutate_if(is.numeric, ~round(., digits=2)) %>%
+  separate(col = Study, into = c("Authors", "Study_year"), sep = "_(?=[[:digit:]])", remove = FALSE) %>%
+  select(model_num, Study_year, Study, Species_name, Dye_source_defense, rate_constant, sum_squared_residuals, initial_y, half_y_distance, min, max, mean, median, everything()) %>%
+  arrange(Study_year, Study, Species_name)
 
 #Median search distance
 median(pollen_dispersal_sum$max_search_dist)
   
 #Export
 setwd("C:/Users/leimberk/Box/Biol_Reviews_Analyses/Pollen_dispersal/Fitting_dispersal_curves/export")
-#write.csv(pollen_dispersal_sum, "Dispersal_curves_summary_20210519.csv")
-
+#write.csv(pollen_dispersal_sum, "Dispersal_curves_summary_20211205.csv")
 
 ## ----make_boxplots-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Function to make boxplots comparing summary statistics for defended vs. undefended dye sources
@@ -164,20 +169,20 @@ make_boxplot<-function(data, var){
     title_label<-"50% decay distance (m)\n"
   } 
   
-  boxplot<-ggplot(data = data, aes(x = Dye_source_defense, y = .data[[var]], fill = Dye_source_defense))+
-            geom_boxplot(show.legend = FALSE, alpha = 0.5, width = 0.5)+
-            geom_point(size = 2, shape = 21) +
-            labs(y = title_label, x = "") +
-            theme_bw() +
-            theme(panel.grid.major = element_blank(),
-                  panel.grid.minor = element_blank(),
-                  axis.text.x = element_text(size=14),
-                  axis.text.y = element_text(size=14),
-                  axis.title.x = element_text(size=14),
-                  axis.title.y = element_text(size=14),
-                  plot.margin = unit(c(1.5, 1.5, 1.5, 2.5), "lines"), #Default plot margins in theme_bw are 1, 1, 0.5, 0.5 (top, right, bottom, left); adjusting for spacing in ggarrange when combine plots
-                  legend.position = "none") +
-            scale_fill_grey()
+  boxplot <- ggplot(data = data, aes(x = Dye_source_defense, y = .data[[var]], fill = Dye_source_defense))+
+             geom_boxplot(show.legend = FALSE, alpha = 0.5, width = 0.5)+
+             geom_point(size = 2, shape = 21) +
+             labs(y = title_label, x = "") +
+             theme_bw() +
+             theme(panel.grid.major = element_blank(),
+                   panel.grid.minor = element_blank(),
+                   axis.text.x = element_text(size=14),
+                   axis.text.y = element_text(size=14),
+                   axis.title.x = element_text(size=14),
+                   axis.title.y = element_text(size=14),
+                   plot.margin = unit(c(1.5, 1.5, 1.5, 2.5), "lines"), #Default plot margins in theme_bw are 1, 1, 0.5, 0.5 (top, right, bottom, left); adjusting for spacing in ggarrange when combine plots
+                   legend.position = "none") +
+             scale_fill_grey()
 
   return(boxplot)
 }
@@ -258,8 +263,8 @@ make_curve_plots<-function(data, defended){
 #Reorder and italicize plant names in legend. Want color gradient to match decay rate.
 temp <- pollen_dispersal_sum %>% arrange(Dye_source_defense, desc(rate_constant))
 
-defend_plant_order <- c("Heliconia latispatha", "Justicia secunda (Trinidad)", "Hansteinia blepharorachis", "Heliconia imbricata", "Justicia sp", "Echeveria gibbiflora")
-defend_plant_labels <- c(expression(italic("Heliconia latispatha")), expression(italic("Justicia secunda")*" (Trinidad)"), expression(italic("Hansteinia blepharorachis")), expression(italic("Heliconia imbricata")), expression(italic("Justicia sp.")), expression(italic("Echeveria gibbiflora")))
+defend_plant_order <- c("Heliconia latispatha", "Justicia secunda (Trinidad)", "Hansteinia blepharorachis", "Heliconia imbricata", "Justicia spp", "Echeveria gibbiflora")
+defend_plant_labels <- c(expression(italic("Heliconia latispatha")), expression(italic("Justicia secunda")*" (Trinidad)"), expression(italic("Hansteinia blepharorachis")), expression(italic("Heliconia imbricata")), expression(italic("Justicia")~"spp."), expression(italic("Echeveria gibbiflora")))
 
 undefend_plant_order <- c("Mandevilla hirsuta (Trinidad)", "Heliconia acuminata", "Justicia secunda (Trinidad)", "Rasizea spicata", "Heliconia tortuosa", "Justicia secunda (Tobago)", "Mandevilla hirsuta (Tobago)")
 undefend_plant_labels <- c(expression(italic("Mandevilla hirsuta")*" (Trinidad)"), expression(italic("Heliconia acuminata")), expression(italic("Justicia secunda")*" (Trinidad)"), expression(italic("Rasizea spicata")), expression(italic("Heliconia tortuosa")), expression(italic("Justicia secunda")*" (Tobago)"), expression(italic("Mandevilla hirsuta")*" (Tobago)"))
@@ -296,5 +301,5 @@ curves_boxplot_multiplot <- ggpubr::ggarrange(curves_multiplot, boxplot_multiplo
 curves_boxplot_multiplot
 
 setwd("C:/Users/leimberk/Box/Biol_Reviews_Analyses/Pollen_dispersal/Fitting_dispersal_curves/export")
-#ggsave(filename="Pollen_dispersal_curves_metrics_20210519.png", plot=curves_boxplot_multiplot, device="png", width=8.5, height=14, units="in", dpi=300)
+#ggsave(filename="Pollen_dispersal_curves_metrics_20211130.png", plot=curves_boxplot_multiplot, device="png", width=8.5, height=14, units="in", dpi=300)
 
