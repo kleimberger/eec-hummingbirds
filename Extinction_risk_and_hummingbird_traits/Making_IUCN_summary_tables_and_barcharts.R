@@ -41,7 +41,7 @@ clade_status_sum <- iucn_data %>%
   spread(key = Redlist_category, value = Num_spp, fill = 0)
 
 #Population trends ('Decreasing' in phylogenetic regression)
-clade_pop_sum<-iucn_data %>%
+clade_pop_sum <- iucn_data %>%
   group_by(Clade, Population_trend) %>%
   summarise(Num_spp = n()) %>%
   ungroup() %>%
@@ -176,7 +176,7 @@ fd_clade_status_multiplot <- ggpubr::ggarrange(clade_status_stacked_plot, fd_sta
 fd_clade_pop_multiplot <- ggpubr::ggarrange(clade_pop_stacked_plot, fd_pop_stacked_plot, ncol = 2, nrow = 1, align = "h", common.legend = TRUE,  legend = "top", labels = c("C", "D"), font.label = list(size = 18))
 
 #Combine plots for population trend (will be plots C & D)
-fd_clade_status_multiplot <- ggpubr::annotate_figure(fd_clade_status_multiplot, top = text_grob("Red List category", face = "bold", size = 18))
+fd_clade_status_multiplot <- ggpubr::annotate_figure(fd_clade_status_multiplot, top = text_grob(expression(bolditalic("Red List")~bold("category")), size = 18))
 fd_clade_pop_multiplot <- ggpubr::annotate_figure(fd_clade_pop_multiplot, top = text_grob("Population trend", face = "bold", size = 18))
 
 fd_clade_status_multiplot
@@ -188,11 +188,13 @@ fd_clade_multiplot
 
 #Export
 setwd("C:/Users/leimberk/Box/Biol_Reviews_Analyses/IUCN_status_and_traits/2_Making_IUCN_summary_tables")
-#ggsave(filename = "export/IUCN_extinction_risk_multiplot_rdylbu_20201030.png", plot = fd_clade_multiplot, device = "png", width = 10, height = 12, units = "in")
+#ggsave(filename = "export/IUCN_extinction_risk_multiplot_rdylbu_20211129.png", plot = fd_clade_multiplot, device = "png", width = 10, height = 12, units = "in")
 
 
 ## ----number_of_species_per_panel------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-#Info for figure caption
+
+#Info for figure caption.
+#Note: Patagona is not included in these figures, but is included in the summary tables.
 panel_A_sum <- clade_plot_data %>% filter(Redlist_category != "Data Deficient") %>% summarise(Num_spp = n())
 panel_C_sum <- clade_plot_data %>% filter(Population_trend != "Unknown") %>% summarise(Num_spp = n())
 
